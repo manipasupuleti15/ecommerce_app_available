@@ -1,34 +1,28 @@
+
 version: '3.8'
 
 services:
-  # =========================================================================
-  # 1. DATABASE SERVICE (PostgreSQL) - STRICTLY PRIVATE
-  # =========================================================================
   db:
     image: postgres:15-alpine
     container_name: ecommerce_db
     restart: always
     environment:
-      POSTGRES_USER: shop_user
-      POSTGRES_PASSWORD: shop_secure_password
-      POSTGRES_DB: ecommerce_db
+      POSTGRES_USER: ${POSTGRES_USER:-shop_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ecommerce_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
-    # Port 5432 is NOT published to host; exposed internally within app-network only
     expose:
       - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shop_user -d ecommerce_db"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 10s
 
-  # =========================================================================
-  # 2. BACKEND SERVICE (FastAPI) - STRICTLY PRIVATE
-  # =========================================================================
   backend:
     build:
       context: ./backend
@@ -36,13 +30,12 @@ services:
     container_name: ecommerce_backend
     restart: always
     environment:
-      DATABASE_URL: postgresql://shop_user:shop_secure_password@db:5432/ecommerce_db
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
     depends_on:
       db:
         condition: service_healthy
     networks:
       - app-network
-    # Port 8000 is NOT published to host; accessible only by Nginx reverse proxy
     expose:
       - "8000"
     healthcheck:
@@ -52,9 +45,6 @@ services:
       retries: 3
       start_period: 15s
 
-  # =========================================================================
-  # 3. FRONTEND SERVICE (React + Nginx) - EXPOSED PUBLICLY ON PORT 80
-  # =========================================================================
   frontend:
     build:
       context: ./frontend
@@ -62,8 +52,7 @@ services:
     container_name: ecommerce_frontend
     restart: always
     ports:
-      # Only port 80 is published to the host for public internet traffic
-      - "80:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -76,9 +65,6 @@ services:
       retries: 3
       start_period: 5s
 
-# ===========================================================================
-# VOLUMES & ISOLATED BRIDGE NETWORKS
-# ===========================================================================
 volumes:
   postgres_data:
     driver: local
@@ -86,5 +72,3 @@ volumes:
 networks:
   app-network:
     driver: bridge
-    ipam:
-      driver: default
